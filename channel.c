@@ -21,7 +21,6 @@
 #include <asterisk/lock.h>			/* AST_MUTEX_DEFINE_STATIC */
 #include <asterisk/timing.h>			/* ast_timer_fd() ast_timer_set_rate() ast_timer_ack() */
 #include <asterisk/ast_version.h>		/* ASTERISK_VERSION_NUM */
-#include <asterisk/format_cache.h>
 
 #include "channel.h"
 #include "chan_dongle.h"
@@ -98,9 +97,8 @@ EXPORT_DEF int channels_loop(struct pvt * pvt, const struct ast_channel * reques
 		? 1
 		: 0;
 }
-#if ASTERISK_VERSION_NUM >= 130000 /* 13+ */
-static struct ast_channel * channel_request (attribute_unused const char * type, struct ast_format_cap * cap, const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor, const char * data, int * cause)
-#elif ASTERISK_VERSION_NUM >= 100000 /* 10+ */
+
+#if ASTERISK_VERSION_NUM >= 100000 /* 10+ */
 
 static struct ast_channel * channel_request (attribute_unused const char * type, struct ast_format_cap * cap, const struct ast_channel *requestor, void * data, int * cause)
 
@@ -134,9 +132,8 @@ static struct ast_channel * channel_request (attribute_unused const char * type,
 		*cause = AST_CAUSE_INCOMPATIBLE_DESTINATION;
 		return NULL;
 	}
-#if ASTERISK_VERSION_NUM >= 130000 /* 13+ */
-    if (!ast_format_cap_iscompatible(cap, channel_tech.capabilities))
-#elif ASTERISK_VERSION_NUM >= 100000 /* 10+ */
+
+#if ASTERISK_VERSION_NUM >= 100000 /* 10+ */
 	if (!ast_format_cap_iscompatible(cap, &chan_dongle_format))
 #else
 	oldformat = format;
@@ -232,7 +229,13 @@ static int channel_call (struct ast_channel* channel, char* dest, attribute_unus
 	{
 		if (CONF_SHARED(pvt, callingpres) < 0)
 		{
-			clir = ast_channel_connected(channel)->id.number.presentation;
+#if ASTERISK_VERSION_NUM >= 100000
+			clir = ast_channel_connected(channel)->id.number.presentation;	
+#elif ASTERISK_VERSION_NUM >= 10800
+			clir = channel->connected.id.number.presentation;
+#else
+			clir = channel->cid.cid_pres;
+#endif
 		}
 		else
 		{
@@ -750,9 +753,8 @@ static int channel_write (struct ast_channel* channel, struct ast_frame* f)
 	struct pvt* pvt;
 	size_t count;
 	int gains[2];
-#if ASTERISK_VERSION_NUM >= 130000 /* 13+ */
-    if (f->frametype != AST_FRAME_VOICE || ast_format_cmp(f->subclass.format, ast_format_slin) != AST_FORMAT_CMP_EQUAL)
-#elif ASTERISK_VERSION_NUM >= 100000 /* 10+ */
+
+#if ASTERISK_VERSION_NUM >= 100000 /* 10+ */
 	if (f->frametype != AST_FRAME_VOICE || f->subclass.format.id != AST_FORMAT_SLINEAR)
 #else /* 10- */
 	if (f->frametype != AST_FRAME_VOICE || f->subclass_codec != AST_FORMAT_SLINEAR)
@@ -787,11 +789,7 @@ static int channel_write (struct ast_channel* channel, struct ast_frame* f)
 
 	if(CPVT_TEST_FLAG(cpvt, CALL_FLAG_MULTIPARTY) && !CPVT_TEST_FLAG(cpvt, CALL_FLAG_BRIDGE_CHECK))
 	{
-#if ASTERISK_VERSION_NUM >= 130000 /* 13+ */
-        RAII_VAR(struct ast_channel *, bridged, ast_channel_bridge_peer(channel), ast_channel_cleanup);
-#else
 		struct ast_channel* bridged = ast_bridged_channel(channel);
-#endif
 
 		CPVT_SET_FLAGS(cpvt, CALL_FLAG_BRIDGE_CHECK);
 
@@ -1163,9 +1161,7 @@ EXPORT_DEF struct ast_channel* new_channel (struct pvt* pvt, int ast_state, cons
 	cpvt = cpvt_alloc(pvt, call_idx, dir, state);
 	if (cpvt)
 	{
-#if ASTERISK_VERSION_NUM >= 130000
-        channel = ast_channel_alloc (1, ast_state, cid_num, PVT_ID(pvt), NULL, dnid, CONF_SHARED(pvt, context), NULL, requestor, AST_AMA_NONE, "%s/%s-%02u%08lx", channel_tech.type, PVT_ID(pvt), call_idx, pvt->channel_instanse);
-#elif ASTERISK_VERSION_NUM >= 10800
+#if ASTERISK_VERSION_NUM >= 10800
 		channel = ast_channel_alloc (1, ast_state, cid_num, PVT_ID(pvt), NULL, dnid, CONF_SHARED(pvt, context), requestor ? ast_channel_linkedid(requestor): NULL, 0, "%s/%s-%02u%08lx", channel_tech.type, PVT_ID(pvt), call_idx, pvt->channel_instanse);
 #else
 		channel = ast_channel_alloc (1, ast_state, cid_num, PVT_ID(pvt), NULL, dnid, CONF_SHARED(pvt, context), 0, "%s/%s-%02u%08lx", channel_tech.type, PVT_ID(pvt), call_idx, pvt->channel_instanse);
@@ -1273,9 +1269,7 @@ EXPORT_DEF void start_local_channel (struct pvt* pvt, const char* exten, const c
 
 	snprintf (channel_name, sizeof (channel_name), "%s@%s", exten, CONF_SHARED(pvt, context));
 
-#if ASTERISK_VERSION_NUM >= 130000 /* 13+ */
-	channel = ast_request ("Local", chan_dongle_format_cap, NULL, NULL, channel_name, &cause);
-#elif ASTERISK_VERSION_NUM >= 100000 /* 10+ */
+#if ASTERISK_VERSION_NUM >= 100000 /* 10+ */
 	channel = ast_request ("Local", chan_dongle_format_cap, NULL, channel_name, &cause);
 #elif ASTERISK_VERSION_NUM >= 10800 /* 1.8+ */
 	channel = ast_request ("Local", AST_FORMAT_AUDIO_MASK, NULL, channel_name, &cause);
