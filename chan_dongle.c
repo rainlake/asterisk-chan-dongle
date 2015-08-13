@@ -72,9 +72,10 @@ ASTERISK_FILE_VERSION(__FILE__, "$Rev: " PACKAGE_REVISION " $")
 
 EXPORT_DEF const char * const dev_state_strs[4] = { "stop", "restart", "remove", "start" };
 EXPORT_DEF public_state_t * gpublic;
+#if ASTERISK_VERSION_NUM < 130000 /* 10+ */
 EXPORT_DEF struct ast_format chan_dongle_format;
 EXPORT_DEF struct ast_format_cap * chan_dongle_format_cap;
-
+#endif
 
 static int public_state_init(struct public_state * state);
 
@@ -1662,7 +1663,13 @@ static int public_state_init(struct public_state * state)
 		rv = AST_MODULE_LOAD_FAILURE;
 		if(discovery_restart(state) == 0)
 		{
-#if ASTERISK_VERSION_NUM >= 100000 /* 10+ */
+#if ASTERISK_VERSION_NUM >= 130000 /* 10+ */
+            /* set preferred capabilities */
+		        if (!(channel_tech.capabilities = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT))) {
+                    return AST_MODULE_LOAD_FAILURE;
+		        }
+		        ast_format_cap_append(channel_tech.capabilities, ast_format_slin, 0);
+#elif ASTERISK_VERSION_NUM >= 100000 /* 10+ */
 			/* set preferred capabilities */
 		        ast_format_set(&chan_dongle_format, AST_FORMAT_SLINEAR, 0);
 		        if (!(channel_tech.capabilities = ast_format_cap_alloc())) {
@@ -1684,7 +1691,10 @@ static int public_state_init(struct public_state * state)
 			}
 			else
 			{
-#if ASTERISK_VERSION_NUM >= 100000 /* 10+ */
+#if ASTERISK_VERSION_NUM >= 130000 /* 10+ */
+                ast_format_cap_destroy(channel_tech.capabilities);
+                channel_tech.capabilities = NULL;
+#elif ASTERISK_VERSION_NUM >= 100000 /* 10+ */
 				channel_tech.capabilities = ast_format_cap_destroy(channel_tech.capabilities);
 #endif
 				ast_log (LOG_ERROR, "Unable to register channel class %s\n", channel_tech.type);
@@ -1714,7 +1724,10 @@ static void public_state_fini(struct public_state * state)
 {
 	/* First, take us out of the channel loop */
 	ast_channel_unregister (&channel_tech);
-#if ASTERISK_VERSION_NUM >= 100000 /* 10+ */
+#if ASTERISK_VERSION_NUM >= 130000 /* 10+ */
+    ast_format_cap_destroy(channel_tech.capabilities);
+    channel_tech.capabilities = NULL;
+#elif ASTERISK_VERSION_NUM >= 100000 /* 10+ */
 	channel_tech.capabilities = ast_format_cap_destroy(channel_tech.capabilities);
 #endif
 

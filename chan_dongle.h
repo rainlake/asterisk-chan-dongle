@@ -34,8 +34,13 @@ INLINE_DECL const char * dev_state2str_msg(dev_state_t state)
 }
 
 /* Only linear is allowed */
+#if ASTERISK_VERSION_NUM >= 130000 /* 10+ */
+#include <asterisk/format_cache.h>
+#define AST_DONGLE_ALLOW_FORMAT ast_format_slin
+#else
 EXPORT_DECL struct ast_format chan_dongle_format;
 EXPORT_DECL struct ast_format_cap * chan_dongle_format_cap;
+#endif
 
 typedef enum {
 	RESTATE_TIME_NOW	= 0,
